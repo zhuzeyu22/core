@@ -481,6 +481,8 @@ export const localizationBundle = {
     'preference.terminal.integrated.xtermRenderType': 'Xterm Render Type',
     'preference.terminal.integrated.xtermRenderTypeDesc':
       'Choose Xterm render type, Webgl for better performance, Canvas better compatibility',
+    'preference.terminal.integrated.enablePersistentSessionDesc':
+      'Persist terminal sessions/history for the workspace across window reloads.',
     'preference.terminal.integrated.cursorStyle': 'Terminal > Cursor Style',
     'preference.terminal.integrated.cursorStyleDesc': 'Control the style of terminal cursor',
     'common.preference.open': 'Settings',
@@ -530,6 +532,8 @@ export const localizationBundle = {
     'preference.debug.inline.values': 'Show variable values inline in editor while debugging.',
     'preference.debug.breakpoint.editorHint':
       'After enabling, there will be a background color blinking prompt when clicking on the breakpoint list to jump to the editor.',
+    'preference.debug.breakpoint.showBreakpointsInOverviewRuler':
+      'Controls whether breakpoints should be shown in the overview ruler.',
 
     // workbench
     'preference.workbench.refactoringChanges.showPreviewStrategy':
@@ -1030,6 +1034,7 @@ export const localizationBundle = {
     'terminal.openFolder': 'Open folder in new window',
     'terminal.relaunch': 'Relaunch Terminal',
     'terminal.toggleTerminal': 'Toggle Terminal',
+    'terminal.killProcess': 'Kill Process',
 
     'terminal.focusNext.inTerminalGroup': 'Terminal: Focus Next Terminal in Terminal Group',
     'terminal.focusPrevious.inTerminalGroup': 'Terminal: Focus Previous Terminal in Terminal Group',

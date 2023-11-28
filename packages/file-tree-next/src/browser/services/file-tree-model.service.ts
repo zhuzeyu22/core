@@ -357,7 +357,7 @@ export class FileTreeModelService {
     );
     this.disposableCollection.push(
       this.treeModel.root.watcher.on(TreeNodeEvent.DidResolveChildren, (target) => {
-        this.loadingDecoration.removeTarget(target);
+        this.loadingDecoration.clearAppliedTarget();
         this.treeModel.dispatchChange();
       }),
     );
@@ -382,7 +382,8 @@ export class FileTreeModelService {
         });
       }),
     );
-    await this.fileTreeService.startWatchFileEvent();
+    // 文件变化的监听不应该阻塞渲染
+    this.fileTreeService.startWatchFileEvent();
     this.onFileTreeModelChangeEmitter.fire(this._treeModel);
 
     this._whenReady.resolve();
@@ -418,28 +419,22 @@ export class FileTreeModelService {
 
   // 清空所有节点选中态
   clearFileSelectedDecoration = () => {
-    this._selectedFiles.forEach((file) => {
-      this.selectedDecoration.removeTarget(file);
-    });
+    this.selectedDecoration.clearAppliedTarget();
     this._selectedFiles = [];
   };
 
   // 清空其他选中/焦点态节点，更新当前焦点节点
   activeFileDecoration = (target: File | Directory, dispatchChange = true) => {
     if (this.contextMenuFile) {
-      this.contextMenuDecoration.removeTarget(this.contextMenuFile);
+      this.contextMenuDecoration.clearAppliedTarget();
       this.contextMenuFile = undefined;
     }
     if (target) {
       if (this.selectedFiles.length > 0) {
-        // 因为选择装饰器可能通过其他方式添加而不能及时在selectedFiles上更新
-        // 故这里遍历所有选中装饰器的节点进行一次统一清理
-        for (const target of this.selectedDecoration.appliedTargets.keys()) {
-          this.selectedDecoration.removeTarget(target);
-        }
+        this.selectedDecoration.clearAppliedTarget();
       }
       if (this.focusedFile) {
-        this.focusedDecoration.removeTarget(this.focusedFile);
+        this.focusedDecoration.clearAppliedTarget();
       }
       this.selectedDecoration.addTarget(target);
       this.focusedDecoration.addTarget(target);
@@ -460,17 +455,17 @@ export class FileTreeModelService {
     }
 
     if (this.contextMenuFile) {
-      this.contextMenuDecoration.removeTarget(this.contextMenuFile);
+      this.contextMenuDecoration.clearAppliedTarget();
       this.contextMenuFile = undefined;
     }
     if (target) {
       if (this.selectedFiles.length > 0) {
-        this.selectedFiles.forEach((file) => {
-          this.selectedDecoration.removeTarget(file);
-        });
+        // 由于文件树更新较为频繁，容易出现用户点击时刚好节点被更新情况
+        // 故这里需要从 Decoration 内移除节点
+        this.selectedDecoration.clearAppliedTarget();
       }
       if (this.focusedFile) {
-        this.focusedDecoration.removeTarget(this.focusedFile);
+        this.focusedDecoration.clearAppliedTarget();
       }
       this.selectedDecoration.addTarget(target);
       this._selectedFiles = [target];
@@ -484,10 +479,11 @@ export class FileTreeModelService {
   // 右键菜单焦点态切换
   activateFileActivedDecoration = (target: File | Directory) => {
     if (this.contextMenuFile) {
-      this.contextMenuDecoration.removeTarget(this.contextMenuFile);
+      this.contextMenuDecoration.clearAppliedTarget();
+      this.contextMenuFile = undefined;
     }
     if (this.focusedFile) {
-      this.focusedDecoration.removeTarget(this.focusedFile);
+      this.focusedDecoration.clearAppliedTarget();
       this.focusedFile = undefined;
     }
     this.contextMenuDecoration.addTarget(target);
@@ -498,10 +494,10 @@ export class FileTreeModelService {
   // 右键菜单焦点态切换
   activateFileFocusedDecoration = (target: File | Directory) => {
     if (this.focusedFile) {
-      this.focusedDecoration.removeTarget(this.focusedFile);
+      this.focusedDecoration.clearAppliedTarget();
     }
     if (this.contextMenuFile) {
-      this.contextMenuDecoration.removeTarget(this.contextMenuFile);
+      this.contextMenuDecoration.clearAppliedTarget();
       this.contextMenuFile = undefined;
     }
     this.focusedDecoration.addTarget(target);
@@ -521,12 +517,12 @@ export class FileTreeModelService {
       if (removePreFocusedDecoration) {
         if (this.focusedFile) {
           // 多选情况下第一次切换焦点文件
-          this.focusedDecoration.removeTarget(this.focusedFile);
+          this.focusedDecoration.clearAppliedTarget();
         }
         this.contextMenuFile = target;
       } else if (this.focusedFile) {
         this.contextMenuFile = undefined;
-        this.focusedDecoration.removeTarget(this.focusedFile);
+        this.focusedDecoration.clearAppliedTarget();
       }
       if (target) {
         // 存在多选文件时切换焦点的情况
@@ -548,16 +544,16 @@ export class FileTreeModelService {
     const index = this._selectedFiles.indexOf(target);
     if (index > -1) {
       if (this.focusedFile === target) {
-        this.focusedDecoration.removeTarget(this.focusedFile);
+        this.focusedDecoration.clearAppliedTarget();
         this.focusedFile = undefined;
       }
       this._selectedFiles.splice(index, 1);
-      this.selectedDecoration.removeTarget(target);
+      this.selectedDecoration.clearAppliedTarget();
     } else {
       this._selectedFiles.push(target);
       this.selectedDecoration.addTarget(target);
       if (this.focusedFile) {
-        this.focusedDecoration.removeTarget(this.focusedFile);
+        this.focusedDecoration.clearAppliedTarget();
       }
       this.focusedFile = target;
       this.focusedDecoration.addTarget(target);
@@ -588,7 +584,7 @@ export class FileTreeModelService {
   // 取消选中节点焦点
   deactivateFileDecoration = () => {
     if (this.focusedFile) {
-      this.focusedDecoration.removeTarget(this.focusedFile);
+      this.focusedDecoration.clearAppliedTarget();
       this.focusedFile = undefined;
     }
     // 失去焦点状态时，仅清理右键菜单的选中态
@@ -775,16 +771,16 @@ export class FileTreeModelService {
     this.updateExplorerCompressedContextKey(item, activeUri);
 
     this._isMultiSelected = false;
+    // 单选操作默认先更新选中状态
+    if (type === TreeNodeType.CompositeTreeNode || type === TreeNodeType.TreeNode) {
+      this.activeFileDecoration(item);
+    }
     if (this.fileTreeService.isCompactMode && activeUri) {
       this._activeUri = activeUri;
       // 存在 activeUri 的情况默认 explorerResourceIsFolder 的值都为 true
       this.contextKey?.explorerResourceIsFolder.set(true);
     } else if (!activeUri) {
       this._activeUri = null;
-      // 单选操作默认先更新选中状态
-      if (type === TreeNodeType.CompositeTreeNode || type === TreeNodeType.TreeNode) {
-        this.activeFileDecoration(item);
-      }
       this.contextKey?.explorerResourceIsFolder.set(type === TreeNodeType.CompositeTreeNode);
     }
 
@@ -898,7 +894,7 @@ export class FileTreeModelService {
     let node;
     if (this.focusedFile) {
       node = this.focusedFile;
-      this.focusedDecoration.removeTarget(this.focusedFile);
+      this.focusedDecoration.clearAppliedTarget();
       this.focusedFile = undefined;
     } else if (this.contextMenuFile) {
       node = this.contextMenuFile;
@@ -933,7 +929,7 @@ export class FileTreeModelService {
     let node;
     if (this.focusedFile) {
       node = this.focusedFile;
-      this.focusedDecoration.removeTarget(this.focusedFile);
+      this.focusedDecoration.clearAppliedTarget();
       this.focusedFile = undefined;
     } else if (this.contextMenuFile) {
       node = this.contextMenuFile;
@@ -1176,34 +1172,46 @@ export class FileTreeModelService {
       if (promptHandle instanceof RenamePromptHandle) {
         const target = promptHandle.target as File | Directory;
         const nameFragments = (promptHandle.target as File).displayName.split(Path.separator);
-        const index = this.activeUri?.displayName ? nameFragments.indexOf(this.activeUri?.displayName) : -1;
+        const isCompactNode = target.name.indexOf(Path.separator) > 0;
+        if (
+          isCompactNode &&
+          this.activeUri &&
+          !(promptHandle.target as File).uri.toString().includes(this.activeUri.toString())
+        ) {
+          // 当为压缩节点重命名，但 activeUri 与传入的文件不一致时，不允许重命名
+          return false;
+        }
+        const index = this.activeUri
+          ? nameFragments.length -
+            (promptHandle.target as File).uri.toString().replace(this.activeUri.toString(), '').split(Path.separator)
+              .length
+          : -1;
         const newNameFragments = index === -1 ? [] : nameFragments.slice(0, index).concat(newName);
         let from = target.uri;
         let to = (target.parent as Directory).uri.resolve(newName);
-        const isCompactNode = target.name.indexOf(Path.separator) > 0;
         // 无变化，直接返回
         if ((isCompactNode && this.activeUri?.displayName === newName) || (!isCompactNode && newName === target.name)) {
           return true;
         }
         promptHandle.addAddonAfter('loading_indicator');
-        if (isCompactNode && newNameFragments.length > 0) {
+        if (isCompactNode && newNameFragments.length > 0 && Directory.is(target.parent)) {
           // 压缩目录情况下，需要计算下标进行重命名路径拼接
-          from = (target.parent as Directory).uri.resolve(nameFragments.slice(0, index + 1).join(Path.separator));
-          to = (target.parent as Directory).uri.resolve(newNameFragments.concat().join(Path.separator));
+          from = target.parent.uri.resolve(nameFragments.slice(0, index + 1).join(Path.separator));
+          to = target.parent.uri.resolve(newNameFragments.concat().join(Path.separator));
         }
-        this.fileTreeService.updateRefreshable(true);
         const error = await this.fileTreeAPI.mv(from, to, target.type === TreeNodeType.CompositeTreeNode);
-        promptHandle.removeAddonAfter();
         if (error) {
           this.validateMessage = {
             type: PROMPT_VALIDATE_TYPE.ERROR,
             message: error,
             value: newName,
           };
-          this.fileTreeService.updateRefreshable(false);
+          this.fileTreeService.updateRefreshable(true);
           promptHandle.addValidateMessage(this.validateMessage);
           return false;
         }
+        this.fileTreeService.updateRefreshable(false);
+        promptHandle.removeAddonAfter();
         if (!isCompactNode && target.parent) {
           // 重命名节点的情况，直接刷新一下父节点即可
           const node = await this.fileTreeService.moveNodeByPath(
@@ -1216,11 +1224,12 @@ export class FileTreeModelService {
           if (node) {
             this.selectFileDecoration(node as File, false);
           }
-        } else {
+          this.fileTreeService.updateRefreshable(true);
+        } else if (Directory.is(target)) {
           // 更新压缩目录展示名称
           // 由于节点移动时默认仅更新节点路径
           // 我们需要自己更新额外的参数，如uri, filestat等
-          (target as Directory).updateMetaData({
+          target.updateMetaData({
             name: newNameFragments.concat(nameFragments.slice(index + 1)).join(Path.separator),
             uri: to,
             fileStat: {
@@ -1231,15 +1240,18 @@ export class FileTreeModelService {
           });
           this.treeModel.dispatchChange();
           let promise;
-          if ((target.parent as Directory).children?.find((child) => target.path.indexOf(child.path) >= 0)) {
+          if (
+            Directory.is(target.parent) &&
+            target.parent.children?.find((child) => target.path.indexOf(child.path) >= 0)
+          ) {
             // 当重命名后的压缩节点在父节点中存在子节点时，刷新父节点
             // 如：
             // 压缩节点 001/002 修改为 003/002 时
             // 同时父节点下存在 003 空节点
-            promise = this.fileTreeService.refresh(target.parent as Directory);
+            promise = this.fileTreeService.refresh(target.parent);
           } else {
             // 压缩节点重命名时，刷新文件夹更新子文件路径
-            promise = this.fileTreeService.refresh(target as Directory);
+            promise = this.fileTreeService.refresh(target);
           }
           promise.then(() => {
             selectNodeIfNodeExist(to);

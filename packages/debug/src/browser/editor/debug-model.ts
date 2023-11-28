@@ -10,6 +10,7 @@ import {
   AbstractMenuService,
 } from '@opensumi/ide-core-browser/lib/menu/next';
 import { URI, DisposableCollection, isOSX, memoize, Disposable, uuid } from '@opensumi/ide-core-common';
+import { IThemeService, debugIconBreakpointForeground } from '@opensumi/ide-theme';
 import * as monaco from '@opensumi/monaco-editor-core/esm/vs/editor/editor.api';
 
 import {
@@ -68,6 +69,9 @@ export class DebugModel implements IDebugModel {
 
   @Autowired(PreferenceService)
   private readonly preferenceService: PreferenceService;
+
+  @Autowired(IThemeService)
+  public readonly themeService: IThemeService;
 
   protected frameDecorations: string[] = [];
   protected topFrameRange: monaco.Range | undefined;
@@ -478,6 +482,10 @@ export class DebugModel implements IDebugModel {
         if (positions.length <= 1) {
           return;
         }
+        const maxLineCount = model.getLineCount();
+        if (lineNumber > maxLineCount) {
+          return;
+        }
         const firstColumn = model.getLineFirstNonWhitespaceColumn(lineNumber);
         const lastColumn = model.getLineLastNonWhitespaceColumn(lineNumber);
         positions.forEach((p) => {
@@ -534,13 +542,28 @@ export class DebugModel implements IDebugModel {
     const lineNumber = status && status.line ? status.line : breakpoint.raw.line;
     const column = breakpoint.raw.column || 0;
     const model = this.editor.getModel()!;
-    const renderInline = column > model.getLineFirstNonWhitespaceColumn(lineNumber);
+    const maxLine = model.getLineCount();
+    const renderInline = lineNumber > maxLine ? false : column > model.getLineFirstNonWhitespaceColumn(lineNumber);
     const range = new monaco.Range(lineNumber, column, lineNumber, column + 1);
     const { className, message } = this.decorator.getDecoration(
       breakpoint,
       !!session,
       this.breakpointManager.breakpointsEnabled,
     );
+    const showBreakpointsInOverviewRuler = this.preferenceService.getValid(
+      'debug.breakpoint.showBreakpointsInOverviewRuler',
+      false,
+    );
+
+    let overviewRulerDecoration: monaco.editor.IModelDecorationOverviewRulerOptions | null = null;
+    if (showBreakpointsInOverviewRuler) {
+      overviewRulerDecoration = {
+        color: this.themeService.getColor({
+          id: debugIconBreakpointForeground,
+        }),
+        position: monaco.editor.OverviewRulerLane.Left,
+      } as monaco.editor.IModelDecorationOverviewRulerOptions;
+    }
 
     return {
       range,
@@ -550,6 +573,7 @@ export class DebugModel implements IDebugModel {
         glyphMarginHoverMessage: message.map((value) => ({ value })),
         stickiness: options.STICKINESS,
         beforeContentClassName: renderInline ? 'debug-breakpoint-placeholder' : undefined,
+        overviewRuler: overviewRulerDecoration,
       },
     };
   }

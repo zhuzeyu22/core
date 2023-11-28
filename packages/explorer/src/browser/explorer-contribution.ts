@@ -12,13 +12,16 @@ export class ExplorerContribution implements ClientAppContribution, ComponentCon
   @Autowired(IExtensionsSchemaService)
   protected readonly extensionsSchemaService: IExtensionsSchemaService;
 
-  // Explorer 只注册容器
+  /**
+   * register `explorer` component container
+   */
   registerComponent(registry: ComponentRegistry) {
     registry.register('@opensumi/ide-explorer', [], {
       iconClass: getIcon('explorer'),
       title: localize('explorer.title'),
       priority: 10,
       containerId: EXPLORER_CONTAINER_ID,
+      activateKeyBinding: 'ctrlcmd+shift+e',
     });
   }
 

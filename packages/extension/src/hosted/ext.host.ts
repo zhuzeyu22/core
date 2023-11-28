@@ -22,15 +22,16 @@ import { ActivatedExtension, ExtensionsActivator, ActivatedExtensionJSON } from 
 import {
   ExtHostAPIIdentifier,
   MainThreadAPIIdentifier,
-  VSCodeExtensionService,
   IExtensionDescription,
   ExtensionIdentifier,
+  IExtHostLocalization,
 } from '../common/vscode';
 
 import { createAPIFactory as createSumiAPIFactory } from './api/sumi/ext.host.api.impl';
 import { createAPIFactory as createTelemetryAPIFactory } from './api/telemetry/ext.host.api.impl';
 import { createApiFactory as createVSCodeAPIFactory } from './api/vscode/ext.host.api.impl';
 import { ExtensionContext } from './api/vscode/ext.host.extensions';
+import { ExtHostLocalization } from './api/vscode/ext.host.localization';
 import { ExtHostSecret } from './api/vscode/ext.host.secrets';
 import { ExtHostStorage } from './api/vscode/ext.host.storage';
 import { KTExtension } from './vscode.extension';
@@ -38,7 +39,8 @@ import { KTExtension } from './vscode.extension';
 const { enumValueToArray } = arrays;
 
 /**
- * 在Electron中，会将kaitian中的extension-host使用webpack打成一个，所以需要其他方法来获取原始的require
+ * 对 extension-host 使用 webpack bundle 后，require 方法会被覆盖为 webpack 内部的 require
+ * 这里是一个 webpack 提供的 workaround，用于获取原始的 require
  */
 declare let __webpack_require__: any;
 declare let __non_webpack_require__: any;
@@ -93,12 +95,7 @@ abstract class ApiImplFactory {
 
 class VSCodeAPIImpl extends ApiImplFactory {
   override createAPIFactory(rpcProtocol: RPCProtocol, extHost: IExtensionHostService, injector: Injector) {
-    return createVSCodeAPIFactory(
-      rpcProtocol,
-      extHost,
-      rpcProtocol.getProxy<VSCodeExtensionService>(MainThreadAPIIdentifier.MainThreadExtensionService),
-      injector.get(AppConfig),
-    );
+    return createVSCodeAPIFactory(rpcProtocol, extHost, injector.get(AppConfig));
   }
 }
 
@@ -109,7 +106,7 @@ class OpenSumiAPIImpl extends ApiImplFactory {
 }
 
 class TelemetryAPIImpl extends ApiImplFactory {
-  override createAPIFactory(rpcProtocol: RPCProtocol, extHost: IExtensionHostService, injector: Injector) {
+  override createAPIFactory(rpcProtocol: RPCProtocol, extHost: IExtensionHostService) {
     return createTelemetryAPIFactory(rpcProtocol, extHost, 'node');
   }
 }
@@ -121,6 +118,7 @@ export default class ExtensionHostServiceImpl implements IExtensionHostService {
   public extensionsActivator: ExtensionsActivator;
   public storage: ExtHostStorage;
   public secret: ExtHostSecret;
+  public localization: ExtHostLocalization;
 
   readonly extensionsChangeEmitter: Emitter<void> = new Emitter<void>();
 
@@ -132,7 +130,7 @@ export default class ExtensionHostServiceImpl implements IExtensionHostService {
 
   private extensionErrors = new WeakMap<Error, IExtensionDescription | undefined>();
 
-  constructor(rpcProtocol: RPCProtocol, public logger: IExtensionLogger, private injector: Injector) {
+  constructor(rpcProtocol: RPCProtocol, public logger: IExtensionLogger, injector: Injector) {
     this.rpcProtocol = rpcProtocol;
     this.storage = new ExtHostStorage(rpcProtocol);
     this.secret = new ExtHostSecret(rpcProtocol);
@@ -142,6 +140,7 @@ export default class ExtensionHostServiceImpl implements IExtensionHostService {
     this.openSumiAPIImpl = new OpenSumiAPIImpl(rpcProtocol, this, injector);
     this.telemetryAPIImpl = new TelemetryAPIImpl(rpcProtocol, this, injector);
 
+    this.localization = rpcProtocol.get<IExtHostLocalization>(ExtHostAPIIdentifier.ExtHostLocalization);
     this.reporterService = new ReporterService(reporter, {
       host: REPORT_HOST.EXTENSION,
     });
@@ -230,6 +229,7 @@ export default class ExtensionHostServiceImpl implements IExtensionHostService {
     // node 层 extension 实例和 vscode 保持一致，并继承 IExtensionProps
     this.extensions = extensions.map((item) => ({
       ...item,
+      l10n: item.packageJSON?.l10n,
       displayName: item.displayName || item.packageJSON.displayName,
       isUnderDevelopment: !!item.isDevelopment,
       publisher: item.packageJSON?.publisher,
@@ -381,6 +381,7 @@ export default class ExtensionHostServiceImpl implements IExtensionHostService {
       this.logger.error(`extension ${id} not found`);
       return;
     }
+    await this.localization.initializeLocalizedMessages(extension);
 
     if (this.extensionsActivator.get(id)) {
       this.logger.warn(`extension ${id} is already activated.`);

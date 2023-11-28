@@ -9,6 +9,7 @@ import { ActivatedExtensionJSON } from '../common/activator';
 import { AbstractWorkerExtProcessService } from '../common/extension.service';
 
 import { getWorkerBootstrapUrl } from './loader';
+import { createSumiApiFactory } from './sumi/main.thread.api.impl';
 import { initWorkerThreadAPIProxy } from './vscode/api/main.thread.api.impl';
 import { startInsideIframe } from './workerHostIframe';
 
@@ -35,10 +36,13 @@ export class WorkerExtProcessService
 
   public protocol: IRPCProtocol;
 
-  private apiFactoryDisposable?: IDisposable;
+  private apiFactoryDisposable: IDisposable[] = [];
 
   public disposeApiFactory() {
-    this.apiFactoryDisposable?.dispose();
+    this.apiFactoryDisposable.forEach((disposable) => {
+      disposable.dispose();
+    });
+    this.apiFactoryDisposable = [];
   }
 
   public disposeProcess() {
@@ -53,7 +57,10 @@ export class WorkerExtProcessService
       this.ready.resolve();
       this.logger.log('[Worker Host] init worker thread api proxy');
       this.logger.verbose(this.protocol);
-      this.apiFactoryDisposable = toDisposable(await initWorkerThreadAPIProxy(this.protocol, this.injector, this));
+      this.apiFactoryDisposable.push(
+        toDisposable(await initWorkerThreadAPIProxy(this.protocol, this.injector, this)),
+        toDisposable(createSumiApiFactory(this.protocol, this.injector)),
+      );
       this.addDispose(this.apiFactoryDisposable);
 
       await this.getProxy().$updateExtHostData();
@@ -63,13 +70,13 @@ export class WorkerExtProcessService
   }
 
   public async activeExtension(extension: IExtension, isWebExtension: boolean): Promise<void> {
-    const { extendConfig, packageJSON } = extension;
+    const { extendConfig, packageJSON, id } = extension;
     // 对使用 kaitian.js 的老插件兼容
     // 因为可能存在即用了 kaitian.js 作为入口，又注册了 sumiContributes 贡献点的插件
     if (extendConfig?.worker?.main) {
       warning(
         false,
-        '[Deprecated warning]: kaitian.js is deprecated, please use `package.json#sumiContributes` instead',
+        `[Deprecated warning]: ${id}: kaitian.js is deprecated, please use \`package.json#sumiContributes\` instead`,
       );
       await this.doActivateExtension(extension);
       return;

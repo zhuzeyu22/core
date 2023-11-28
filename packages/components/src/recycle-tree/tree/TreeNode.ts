@@ -331,6 +331,8 @@ export class TreeNode implements ITreeNode {
     if (this._disposed) {
       return;
     }
+
+    TreeNode.removeTreeNode(this.id, this.path);
     this._disposed = true;
     this._watcher.notifyDidDispose(this);
   }
@@ -827,22 +829,22 @@ export class CompositeTreeNode extends TreeNode implements ICompositeTreeNode {
             }
           }
         } else if (CompositeTreeNode.is(child)) {
+          // 如果节点默认展开，则忽略后续操作
           if (!(child as CompositeTreeNode).expanded) {
-            // 如果节点没有默认展开，则设置一下展开状态
             (child as CompositeTreeNode).isExpanded = true;
-          }
-          const extraExpandedPaths = await (child as CompositeTreeNode).resolveChildrens(token);
-          if (token?.isCancellationRequested) {
-            return;
-          }
-          if (extraExpandedPaths) {
-            toExpandPaths = toExpandPaths.filter((path) => !extraExpandedPaths.find((a) => a.includes(path)));
-          }
-          if (toExpandPaths.length > 0 && !token?.isCancellationRequested) {
-            toExpandPaths =
-              (await (child as CompositeTreeNode).refreshTreeNodeByPaths([...toExpandPaths], token, origin)) || [];
+            const extraExpandedPaths = await (child as CompositeTreeNode).resolveChildrens(token);
             if (token?.isCancellationRequested) {
               return;
+            }
+            if (extraExpandedPaths) {
+              toExpandPaths = toExpandPaths.filter((path) => !extraExpandedPaths.find((a) => a.includes(path)));
+            }
+            if (toExpandPaths.length > 0 && !token?.isCancellationRequested) {
+              toExpandPaths =
+                (await (child as CompositeTreeNode).refreshTreeNodeByPaths([...toExpandPaths], token, origin)) || [];
+              if (token?.isCancellationRequested) {
+                return;
+              }
             }
           }
         }
@@ -870,6 +872,7 @@ export class CompositeTreeNode extends TreeNode implements ICompositeTreeNode {
             // 如果存在上一次缓存的节点，则使用缓存节点的 ID
             (child as TreeNode).id = TreeNode.getIdByPath(child.path) || (child as TreeNode).id;
             this._children[i] = child;
+            TreeNode.setIdByPath(child.path, child.id);
             if (CompositeTreeNode.is(child) && child.expanded) {
               expandedChilds.push(child as CompositeTreeNode);
             }

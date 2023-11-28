@@ -1,5 +1,5 @@
-@import '~@opensumi/ide-components/lib/style/mixins.less';
-@import '~@opensumi/ide-core-browser/lib/style/variable.less';
+@import '@opensumi/ide-components/lib/style/mixins.less';
+@import '@opensumi/ide-core-browser/lib/style/variable.less';
 
 .kt_workbench_editor {
   height: 100%;
@@ -180,6 +180,7 @@
     overflow-y: hidden;
     display: inline-flex;
     position: relative;
+    height: 100%;
     &.kt_on_drag_over {
       background-color: var(--editorGroup-dropBackground);
     }
@@ -526,6 +527,10 @@
 
 .kt_editor_side_widgets {
   &.kt_editor_side_widgets_bottom {
+    display: block;
+    flex-shrink: 0;
+  }
+  &.kt_editor_side_widgets_top {
     display: block;
     flex-shrink: 0;
   }
